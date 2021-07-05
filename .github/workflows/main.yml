@@ -28,15 +28,15 @@ jobs:
             public
           retention-days: 7 # artifact retention duration, can be upto 30 days
   docker-push:
-    # needs: next-build # Job depends on next-build(above) job
+    needs: next-build # Job depends on next-build(above) job
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      # - name: Download next build # Download the above uploaded artifact
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: build
+      - name: Download next build # Download the above uploaded artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: build
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
