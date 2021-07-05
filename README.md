@@ -1,34 +1,23 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+FROM node:lts-alpine // lts-alpine 리눅스 기반 node 이미지 사용
 
-## Getting Started
+ENV NODE_ENV production // 환경변수 production으로 셋팅
+ENV NPM_CONFIG_LOGLEVEL warn // 
 
-First, run the development server:
+RUN mkdir /home/node/app/ && chown -R node:node /home/node/app
 
-```bash
-npm run dev
-# or
-yarn dev
-```
+WORKDIR /home/node/app // app으로 현재 위치 이동
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+COPY package.json package.json // package.json을 복사
+COPY package-lock.json package-lock.json // package-lock.json을 복사
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+USER node // 사용자 계정을 node로 변경
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+RUN npm install --production // 프로덕션 모드로 install
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+// 컨테이너에 .next와 public 폴더 복사
+COPY --chown=node:node .next .next // 이걸 build하지 않고 해주는 이유는 .env같은 파일이 있을 경우가 있다면 build는 실패하기 때문.
+COPY --chown=node:node public public
 
-## Learn More
+EXPOSE 3000 // 해당 컨테이너 내부에서 유효한 포트 지정
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+CMD npm start // start
