@@ -1,0 +1,97 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        node-version: [14.x]
+    steps:
+      // 코드 다운로드 받음
+      - uses: actions/checkout@v2
+
+      // GitHub Actions 실행되는 Node.js 버전 설정
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      // Cache 파일을 가져옵니다.
+      - name: Cache
+        id: npm-cache
+        uses: actions/cache@v2.1.4
+        with:
+          path: ./node_modules
+          key: ${{ hashFiles('**/package-lock.json') }}
+
+      // 캐시가 없을 경우 설치합니다. 캐시가 있으면 설치할 필요 없이 캐시에서 node_modules를 가져옵니다.
+      - name: Install
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci
+
+      // next build
+      - name: Build
+        run: npm run build
+
+      // GitHub Actions에서 사용할 환경 변수들을 선언한 것 뿐입니다.
+      - name: Set enviroment variables
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "BUCKET=resource.yunseok.com" >> $GITHUB_ENV
+          echo "IMAGE=yunseoktest" >> $GITHUB_ENV
+          echo "REPO=964037622278.dkr.ecr.ap-northeast-2.amazonaws.com" >> $GITHUB_ENV
+
+      // S3 업로드, ECR업로드 등등에 필요한 AWS key 설정입니다.
+      - name: Configure AWS credentials
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+          
+      // 정적파일들을 S3로 업로드합니다. 이건 Next.js에서 정적파일들은 CDN을 통해 최적화를 하기 위해서 한것입니다.
+      - name: Upload static files
+        if: github.ref == 'refs/heads/main'
+        run: |
+          aws s3 cp --recursive --acl public-read ./.next/static s3://$BUCKET/_next/static
+          rm -rf ./.next/static/*
+
+      // 도커 이미지 빌드
+      - name: Docker build
+        if: github.ref == 'refs/heads/main'
+        run: docker build -t $IMAGE .
+
+      // 도커 이미지를 ECR 레포지토리에 업로드합니다.
+      - name: Upload image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 964037622278.dkr.ecr.ap-northeast-2.amazonaws.com
+          docker tag $IMAGE $REPO/$IMAGE:${GITHUB_SHA::7}
+          docker push $REPO/$IMAGE:${GITHUB_SHA::7}
+
+      // AWS CodeDeploy에 새로운 Task definition을 만들기 위해 기존의 Task definition을 다운받습니다. 기존 것을 다운받고 일부만 변경해서 다시 업로드 하기 위해서 다운받습니다.
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition --task-definition test_task_definition --query taskDefinition > task-definition.json
+
+      // 아까 다운받은 Task definition에서 이미지 부분만 교체합니다.
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: kurlymall-next
+          image: $REPO/$IMAGE:${GITHUB_SHA::7}
+
+      // ECS로 배포를 시작합니다.
+      - name: Deploy to Amazon ECS
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          cluster: yunseoktest
+          service: yunseoktest
+          codedeploy-appspec: appspec.yaml // code deploy할 때 필요한 파일로, 이미 레포에 저장해놓습니다.
+          codedeploy-application: yunseoktest
+          codedeploy-deployment-group: yunseoktest-group

@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v2 
       - run: npm ci
       - run: npm run build
-        env:
+        # env:
       # artifact에 파일 업로드
       - name: Upload Next build
         uses: actions/upload-artifact@v2
