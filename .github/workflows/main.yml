@@ -59,6 +59,7 @@ jobs:
       # 도커 이미지 생성 후 Github Container Registry에 저장
       - name: Build and Push Docker Images
         run: |
+          echo $GITHUB_REF_IMAGE
           docker build -t $GITHUB_REF_IMAGE .
           docker push $GITHUB_REF_IMAGE
 
