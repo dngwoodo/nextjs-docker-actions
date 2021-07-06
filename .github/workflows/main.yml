@@ -53,10 +53,8 @@ jobs:
       # 도커 이미지 생성 후 Github Container Registry에 저장
       - name: Build and Push Docker Images
         run: |
-          export GITHUB_REF_IMAGE=ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
-          echo GITHUB_REF_IMAGE
-          docker build -t $GITHUB_REF_IMAGE .
-          docker push $GITHUB_REF_IMAGE
+          docker build -t ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA .
+          docker push ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
 
       # AWS에 배포하기   
       - name: Deploy
@@ -67,8 +65,8 @@ jobs:
           key: ${{ secrets.AWS_PRIVATE_KEY }}
           envs: GITHUB_SHA
           script: |
-            docker pull GITHUB_REF_IMAGE
-            docker tag GITHUB_REF_IMAGE dngwoodo-blog
+            docker pull ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
+            docker tag ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA dngwoodo-blog
             docker stop server
             docker run --rm -d -p 80:3000 --name server dngwoodo-blog
 
