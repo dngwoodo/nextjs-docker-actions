@@ -5,51 +5,74 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch: # Manually run the workflow
 
 jobs:
   next-build:
-    if: ${{ github.event_name == 'workflow_dispatch' }} # 수동으로 트리거 된 경우에만 실행
     runs-on: ubuntu-20.04
     container: node:lts # Use node LTS container version, same as Dockerfile base image
     steps:
+      # 가상 호스트에 코드 복사
       - name: Checkout
-        uses: actions/checkout@v2 # Checkout the code
-      - run: npm ci # install dependencies
+        uses: actions/checkout@v2 
+      - run: npm ci
       - run: npm run build
         env:
-          NEXT_PUBLIC_SENTRY_DSN: ${{secrets.NEXT_PUBLIC_SENTRY_DSN}}
-      - name: Upload Next build # Upload the artifact
+      # artifact에 파일 업로드
+      - name: Upload Next build
         uses: actions/upload-artifact@v2
         with:
           name: build
           path: |
             .next
             public
-          retention-days: 7 # artifact retention duration, can be upto 30 days
-  docker-push:
-    needs: next-build # Job depends on next-build(above) job
+          retention-days: 7 # 최대 30일 저장 가능
+
+  next-deploy:
+    # next-build artifact가 있어야 실행
+    needs: next-build
     runs-on: ubuntu-latest
     steps:
+      # 가상 호스트에 코드 복사
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Download next build # Download the above uploaded artifact
+
+      # artifact에 있는 파일 다운로드
+      - name: Download next build
         uses: actions/download-artifact@v2
         with:
           name: build
+
+      # 환경변수 셋팅
+      - name: Set enviroment variables
+        run: |
+          export GITHUB_REF_IMAGE=ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
+
+      # Github Container Registry에 로그인
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.CR_PAT }}
+
+      # 도커 이미지 생성 후 Github Container Registry에 저장
       - name: Build and Push Docker Images
         run: |
-          export CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
-          export TAG=$([[ $CURRENT_BRANCH == "main" ]] && echo "latest" || echo $CURRENT_BRANCH)
-          export GITHUB_REF_IMAGE=ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
-          export GITHUB_BRANCH_IMAGE=ghcr.io/$GITHUB_REPOSITORY:$TAG
-          docker build -t $GITHUB_REF_IMAGE -t $GITHUB_BRANCH_IMAGE .
-          echo "Pushing Image to GitHub Container Registry"
+          docker build -t $GITHUB_REF_IMAGE .
           docker push $GITHUB_REF_IMAGE
-          docker push $GITHUB_BRANCH_IMAGE
+
+      # AWS에 배포하기   
+      - name: Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ec2-18-118-156-189.us-east-2.compute.amazonaws.com
+          username: ec2-user
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          envs: GITHUB_SHA
+          script: |
+            docker pull GITHUB_REF_IMAGE
+            docker tag GITHUB_REF_IMAGE dngwoodo-blog
+            docker stop server
+            docker run --rm -d -p 80:3000 --name server dngwoodo-blog
+
+

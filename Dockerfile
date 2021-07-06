@@ -12,11 +12,9 @@ COPY package-lock.json package-lock.json
 
 USER node
 
-RUN npm install --production
+RUN npm ci
 
 COPY --chown=node:node .next .next
 COPY --chown=node:node public public
-
-EXPOSE 3000
 
 CMD npm start
