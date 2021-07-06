@@ -46,6 +46,7 @@ jobs:
       - name: Set enviroment variables
         run: |
           export GITHUB_REF_IMAGE=ghcr.io/$GITHUB_REPOSITORY:$GITHUB_SHA
+          echo $GITHUB_REF_IMAGE
 
       # Github Container Registry에 로그인
       - name: Login to GitHub Container Registry
